@@ -71,6 +71,8 @@ interface BaseChatProps {
   clearAlert?: () => void;
   data?: JSONValue[] | undefined;
   actionRunner?: ActionRunner;
+  taskBreakdownEnabled?: boolean;
+  toggleTaskBreakdown?: () => void;
 }
 
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
@@ -107,6 +109,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       clearAlert,
       data,
       actionRunner,
+      taskBreakdownEnabled = false,
+      toggleTaskBreakdown,
     },
     ref,
   ) => {
@@ -560,6 +564,24 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             <div className="i-bolt:stars text-xl"></div>
                           )}
                         </IconButton>
+
+                        <Tooltip.Root>
+                          <Tooltip.Trigger asChild>
+                            <IconButton
+                              onClick={toggleTaskBreakdown}
+                              className={classNames('text-bolt-elements-textSecondary', {
+                                'text-bolt-elements-primary': taskBreakdownEnabled,
+                              })}
+                            >
+                              <div className="i-ph:list-checks text-lg" />
+                            </IconButton>
+                          </Tooltip.Trigger>
+                          <Tooltip.Content side="top">
+                            <div className="px-3 py-1.5">
+                              {taskBreakdownEnabled ? 'Disable' : 'Enable'} Task Breakdown
+                            </div>
+                          </Tooltip.Content>
+                        </Tooltip.Root>
 
                         <SpeechRecognitionButton
                           isListening={isListening}

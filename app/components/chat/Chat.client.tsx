@@ -26,6 +26,8 @@ import { getTemplates, selectStarterTemplate } from '~/utils/selectStarterTempla
 import { logStore } from '~/lib/stores/logs';
 import { streamingState } from '~/lib/stores/streaming';
 import { filesToArtifacts } from '~/utils/fileUtils';
+import { useTaskBreakdown } from '~/lib/hooks/useTaskBreakdown';
+import TaskBreakdownUI from './TaskBreakdownUI';
 
 const toastAnimation = cssTransition({
   enter: 'animated fadeInRight',
@@ -124,6 +126,10 @@ export const ChatImpl = memo(
     const files = useStore(workbenchStore.files);
     const actionAlert = useStore(workbenchStore.alert);
     const { activeProviders, promptId, autoSelectTemplate, contextOptimizationEnabled } = useSettings();
+    const { taskBreakdownEnabled, toggleTaskBreakdown, tasks, isBreakingDown, breakdownPrompt, startTask, resetTasks } =
+      useTaskBreakdown();
+    toggleTaskBreakdown(); // Toggle the task breakdown feature
+    useTaskBreakdown();
 
     const [model, setModel] = useState(() => {
       const savedModel = Cookies.get('selectedModel');
@@ -292,6 +298,19 @@ export const ChatImpl = memo(
       if (isLoading) {
         abort();
         return;
+      }
+
+      // If task breakdown is enabled, break down the prompt into tasks
+      if (taskBreakdownEnabled && !chatStarted) {
+        try {
+          await breakdownPrompt(messageContent, model, provider.name, apiKeys);
+          return;
+        } catch (error) {
+          toast.error('Failed to break down task. Proceeding with original prompt.');
+          console.error('Task breakdown error:', error);
+
+          // Continue with normal message flow if breakdown fails
+        }
       }
 
       runAnimation();
@@ -487,65 +506,83 @@ export const ChatImpl = memo(
       Cookies.set('selectedProvider', newProvider.name, { expires: 30 });
     };
 
-    return (
-      <BaseChat
-        ref={animationScope}
-        textareaRef={textareaRef}
-        input={input}
-        showChat={showChat}
-        chatStarted={chatStarted}
-        isStreaming={isLoading || fakeLoading}
-        onStreamingChange={(streaming) => {
-          streamingState.set(streaming);
-        }}
-        enhancingPrompt={enhancingPrompt}
-        promptEnhanced={promptEnhanced}
-        sendMessage={sendMessage}
-        model={model}
-        setModel={handleModelChange}
-        provider={provider}
-        setProvider={handleProviderChange}
-        providerList={activeProviders}
-        messageRef={messageRef}
-        scrollRef={scrollRef}
-        handleInputChange={(e) => {
-          onTextareaChange(e);
-          debouncedCachePrompt(e);
-        }}
-        handleStop={abort}
-        description={description}
-        importChat={importChat}
-        exportChat={exportChat}
-        messages={messages.map((message, i) => {
-          if (message.role === 'user') {
-            return message;
-          }
+    // Handle starting a specific task from the task breakdown
+    const handleTaskStart = (taskId: string) => {
+      startTask(taskId, setInput);
 
-          return {
-            ...message,
-            content: parsedMessages[i] || '',
-          };
-        })}
-        enhancePrompt={() => {
-          enhancePrompt(
-            input,
-            (input) => {
-              setInput(input);
-              scrollTextArea();
-            },
-            model,
-            provider,
-            apiKeys,
-          );
-        }}
-        uploadedFiles={uploadedFiles}
-        setUploadedFiles={setUploadedFiles}
-        imageDataList={imageDataList}
-        setImageDataList={setImageDataList}
-        actionAlert={actionAlert}
-        clearAlert={() => workbenchStore.clearAlert()}
-        data={chatData}
-      />
+      // After setting the input with the task content, send the message
+      sendMessage(new Event('click') as unknown as React.UIEvent);
+    };
+
+    return (
+      <div ref={animationScope} className="h-full w-full">
+        {taskBreakdownEnabled && (
+          <TaskBreakdownUI
+            tasks={tasks}
+            isBreakingDown={isBreakingDown}
+            onStartTask={handleTaskStart}
+            onReset={resetTasks}
+          />
+        )}
+        <BaseChat
+          ref={scrollRef}
+          textareaRef={textareaRef}
+          messageRef={messageRef}
+          scrollRef={scrollRef}
+          input={input}
+          showChat={showChat}
+          chatStarted={chatStarted}
+          isStreaming={isLoading || fakeLoading}
+          onStreamingChange={(streaming) => {
+            streamingState.set(streaming);
+          }}
+          enhancingPrompt={enhancingPrompt}
+          promptEnhanced={promptEnhanced}
+          sendMessage={sendMessage}
+          model={model}
+          setModel={handleModelChange}
+          provider={provider}
+          setProvider={handleProviderChange}
+          providerList={activeProviders}
+          handleInputChange={(e) => {
+            onTextareaChange(e);
+            debouncedCachePrompt(e);
+          }}
+          handleStop={abort}
+          description={description}
+          importChat={importChat}
+          exportChat={exportChat}
+          messages={messages.map((message, i) => {
+            if (message.role === 'user') {
+              return message;
+            }
+
+            return {
+              ...message,
+              content: parsedMessages[i] || '',
+            };
+          })}
+          enhancePrompt={() => {
+            enhancePrompt(
+              input,
+              (input) => {
+                setInput(input);
+                scrollTextArea();
+              },
+              model,
+              provider,
+              apiKeys,
+            );
+          }}
+          uploadedFiles={uploadedFiles}
+          setUploadedFiles={setUploadedFiles}
+          imageDataList={imageDataList}
+          setImageDataList={setImageDataList}
+          actionAlert={actionAlert}
+          clearAlert={() => workbenchStore.clearAlert()}
+          data={chatData}
+        />
+      </div>
     );
   },
 );
